@@ -14,6 +14,11 @@ const unsigned int LOCAL_UDP_PORT = 4210;  // this ESP32 listens here for nav co
 const char* LAPTOP_IP   = "192.168.1.20";  // TODO: your laptop's IP (check with ipconfig/ifconfig)
 const unsigned int LAPTOP_PORT = 4211;     // must match LISTEN_PORT in field_vision.py
 
+IPAddress local_IP(192, 168, 1, 50);   // the fixed IP you want the ESP32 to have
+IPAddress gateway(192, 168, 1, 1);     // your router's IP (see below)
+IPAddress subnet(255, 255, 255, 0);    // usually this for small networks
+
+
 // Tip: WiFi routers hand out IPs by DHCP, which can change between matches.
 // If possible, reserve a static IP for both the laptop and the ESP32 on
 // your router (or use WiFi.config() below) so you don't have to re-check
@@ -106,12 +111,20 @@ void setup() {
   setNameWithRetry("Cyan", 5);
   setNameWithRetry("Red", 6);
 
-  Serial.print("Connecting to WiFi");
+  if (!WiFi.config(local_IP, gateway, subnet)) {
+    Serial.println("Static IP config failed!");
+  }
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(300);
     Serial.print(".");
   }
+  Serial.println();
+  Serial.print("ESP32 IP: ");
+  Serial.println(WiFi.localIP());  // should now print 192.168.1.50 every time
+}
+
   Serial.println();
   Serial.print("ESP32 IP address: ");
   Serial.println(WiFi.localIP());  // handy to confirm WiFi connected
