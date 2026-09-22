@@ -14,18 +14,31 @@ CAMERA_INDEX = 0              # which webcam (0 is usually the first/only one)
 MARKER_ID = 7                 # the ArUco marker ID you print and stick on the robot
 MARKER_DICT = cv2.aruco.DICT_4X4_50
 
+'''
+Upper Left Corner: 176, 4 
+Upper Right Corner: 1908, 46 
+Lower Left Corner: 180, 1010 
+Lower Right Corner: 1867, 1055 
+Green: 419, 373 
+Purple: 407, 745 
+Red: 816, 174 
+Blue: 1175, 198 
+Cyan: 816, 901 
+Orange: 1158, 894
+'''
+
 # Step 1 of calibration: with the camera in its final mounted position, take one
 # photo of the empty field and read off the pixel (x, y) of each of these 4
 # corners in an image viewer. Order: top-left, top-right, bottom-right, bottom-left.
 IMAGE_PTS = np.array([
-    [0, 0],       # TODO: pixel coords of field's top-left corner
-    [0, 0],       # TODO: top-right
-    [0, 0],       # TODO: bottom-right
-    [0, 0],       # TODO: bottom-left
+    [176, 4],       # TODO: pixel coords of field's top-left corner
+    [1908, 46],       # TODO: top-right
+    [1867, 1055],       # TODO: bottom-right
+    [180, 1010],       # TODO: bottom-left
 ], dtype=np.float32)
 
 # Step 2: the real size of the field (any consistent unit - cm is convenient).
-FIELD_W, FIELD_H = 200, 150   # TODO measure your actual field
+FIELD_W, FIELD_H = 208, 122   # TODO measure your actual field
 FIELD_PTS = np.array([
     [0, 0], [FIELD_W, 0], [FIELD_W, FIELD_H], [0, FIELD_H],
 ], dtype=np.float32)
@@ -33,12 +46,12 @@ FIELD_PTS = np.array([
 # Step 3: where each color zone's center is, in the same field units as above.
 # Measure these once the field is set up.
 COLOR_ZONES = {
-    1: (20, 20),     # Orange   TODO
-    2: (180, 20),    # Blue     TODO
-    3: (20, 130),    # Purple   TODO
-    4: (180, 130),   # Green    TODO
-    5: (100, 20),    # Cyan     TODO
-    6: (100, 130),   # Red      TODO
+    1: (419, 373),     # ซ้ายบน   
+    2: (407, 745),    # ซ้ายล่าง     
+    3: (816, 174),    # กลางบน   
+    4: (816, 901),     # กลางล่าง    
+    5: (1175, 198),    # ขวาบน     
+    6: (1158, 894),   # ขวาล่าง      
 }
 
 HEADING_TOLERANCE = math.radians(8)   # how close to "pointed at the target" counts as aligned
