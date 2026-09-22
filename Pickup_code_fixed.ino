@@ -1,49 +1,32 @@
-/*
-  Stone Pickup Code - fixed / restructured
-  -----------------------------------------
-  Changelog vs your original file (see chat for full explanation):
-   - Fixed several lines that would not compile (missing ';', "printIn" typo,
-     a broken if/else brace, an uninitialized variable declaration).
-   - Removed the blocking `while` loops that never re-read the HuskyLens, which
-     caused box_size / xCenter to go stale -> effectively infinite loops.
-   - Removed the delay(5000) at the end of loop() (it froze the robot for 5s
-     every cycle).
-   - Rebuilt the logic as a simple state machine (SEARCHING -> CENTERING ->
-     APPROACHING -> PICKING) that re-reads the HuskyLens every single loop(),
-     so it's non-blocking and reacts every cycle.
-   - Added real Servo control for the two gripper arms (close_servo was only
-     a variable before, nothing ever moved).
-   - Added placeholder motor-driver functions (forward/turnLeft/turnRight/stop)
-     since your original turn()/forward() were just comments. PINS AND LOGIC
-     HERE ARE GUESSES based on a generic 2-motor driver (e.g. L298N/TB6612)
-     - change them to match your actual wiring.
-   - When multiple stones are visible at once (very likely with a scattered
-     flock of 6 colors), the code now targets the single LARGEST box (i.e.
-     nearest stone) each cycle instead of whatever HuskyLens happens to
-     return first.
-   - Stores the picked stone's color ID in `color_id` so your placing code
-     can read it later.
-*/
-
 #include <HUSKYLENS.h>
-#include <HuskyLensProtocolCore.h>   // pulled in by HUSKYLENS.h already on most installs; harmless to keep
-#include <HUSKYLENSMindPlus.h>       // same as above
 #include <Wire.h>
-#include <Servo.h>
-
-// NOTE: removed <SoftwareSerial.h> (unused - you talk to HuskyLens over I2C/Wire)
-// and removed <DFRobot_HuskyLens.h> (unused - your `huskylens` object is type
-// HUSKYLENS from HUSKYLENS.h, not DFRobot_HuskyLens; having both libraries
-// included can cause symbol clashes / bloat for no benefit).
+#include <ESP32Servo.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
 
 HUSKYLENS huskylens;
 
-// ---------------- Servo (gripper) setup ----------------
-// TODO: set these to the pins you actually wired the two arm servos to.
-const int LEFT_SERVO_PIN  = 5;
-const int RIGHT_SERVO_PIN = 6;
+// ---------------- WiFi / UDP ----------------
+const char* WIFI_SSID     = "YOUR_WIFI_NAME";      // TODO
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";  // TODO
 
-// TODO: calibrate these angles on your actual gripper geometry.
+const unsigned int LOCAL_UDP_PORT = 4210;  // this ESP32 listens here for nav commands
+const char* LAPTOP_IP   = "192.168.1.20";  // TODO: your laptop's IP (check with ipconfig/ifconfig)
+const unsigned int LAPTOP_PORT = 4211;     // must match LISTEN_PORT in field_vision.py
+
+// Tip: WiFi routers hand out IPs by DHCP, which can change between matches.
+// If possible, reserve a static IP for both the laptop and the ESP32 on
+// your router (or use WiFi.config() below) so you don't have to re-check
+// and re-flash these addresses before every run.
+
+WiFiUDP udp;
+char packetBuffer[64];
+
+// ---------------- Servo (gripper) ----------------
+// Recommended ESP32 PWM-capable pins: 2,4,12-19,21-23,25-27,32-33
+const int LEFT_SERVO_PIN  = 13;   // TODO match your wiring
+const int RIGHT_SERVO_PIN = 14;
+
 const int LEFT_ARM_OPEN_ANGLE   = 60;
 const int LEFT_ARM_CLOSE_ANGLE  = 130;
 const int RIGHT_ARM_OPEN_ANGLE  = 130;
@@ -52,59 +35,60 @@ const int RIGHT_ARM_CLOSE_ANGLE = 60;
 Servo leftArmServo;
 Servo rightArmServo;
 
-// ---------------- Motor driver setup ----------------
-// TODO: these pins/this logic are a generic placeholder for a 2-motor
-// H-bridge driver (L298N / TB6612-style). Replace with your real driver's
-// pins and logic.
-// IMPORTANT: the Servo library uses Timer1 on an Uno/Nano. That disables
-// analogWrite() PWM on pins 9 and 10 while ANY servo is attached - so the
-// motor speed (PWM) pins below deliberately avoid 9 and 10. Don't reuse
-// 9/10 for analogWrite elsewhere in your code.
-const int MOTOR_LEFT_IN1  = 4;
-const int MOTOR_LEFT_IN2  = 7;
-const int MOTOR_RIGHT_IN1 = 8;
-const int MOTOR_RIGHT_IN2 = 12;
-const int MOTOR_LEFT_PWM  = 3;   // ENA
-const int MOTOR_RIGHT_PWM = 11;  // ENB
+// ---------------- Motor driver (placeholder - adjust to your driver) ----------------
+const int MOTOR_LEFT_IN1  = 26;
+const int MOTOR_LEFT_IN2  = 27;
+const int MOTOR_RIGHT_IN1 = 32;
+const int MOTOR_RIGHT_IN2 = 33;
+const int MOTOR_LEFT_PWM  = 25;
+const int MOTOR_RIGHT_PWM = 4;
 
-const int DRIVE_SPEED = 150; // 0-255, tune for your motors
-const int TURN_SPEED  = 120; // 0-255, tune for your motors
+
+const int DRIVE_SPEED = 150;  // 0-255, tune for your motors
+const int TURN_SPEED  = 120;  // 0-255, tune for your motors
 
 // ---------------- HuskyLens frame / target selection ----------------
-const int FRAME_CENTER_MIN = 120;   // left edge of the "centered" band
-const int FRAME_CENTER_MAX = 200;   // right edge of the "centered" band
+const int FRAME_CENTER_MIN = 120;
+const int FRAME_CENTER_MAX = 200;
 
+// Create an array that hold up maximum box of detection results
 const int MAX_BLOCKS = 10;
 HUSKYLENSResult blocks[MAX_BLOCKS];
 int blockCount = 0;
 
-// ---------------- Pickup state machine ----------------
+// Type of exactly 4 possible values
 enum PickupState { SEARCHING, CENTERING, APPROACHING, PICKING };
 PickupState pickupState = SEARCHING;
 
-bool close_servo = false;   // reflects current gripper state (false = open)
-int  color_id = -1;         // color ID of the stone we just picked, for placing mode
+bool close_servo = true;   // reflects current gripper state (false = open)
+int  color_id = -1;         // color ID of the stone currently held
+bool pick_up_mode = true;
+bool placing_mode = false;
+bool needToAnnouncePickup = false;
 
-bool pick_up_mode  = true;
-bool placing_mode  = false;
+long minimum_box_size = 3000;  // TODO calibrate
 
-long minimum_box_size = 3000;  // TODO: calibrate - the width*height at which the arms can reach the stone
+// ---------------- Placing mode ----------------
+String lastNavCommand = "";
+unsigned long lastNavPacketTime = 0;
+const unsigned long NAV_TIMEOUT_MS = 1000;  // stop driving if the laptop goes quiet
+// ---------------- ------------- ---------------
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   Wire.begin();
 
   pinMode(MOTOR_LEFT_IN1, OUTPUT);
   pinMode(MOTOR_LEFT_IN2, OUTPUT);
   pinMode(MOTOR_RIGHT_IN1, OUTPUT);
   pinMode(MOTOR_RIGHT_IN2, OUTPUT);
-  pinMode(MOTOR_LEFT_PWM, OUTPUT);
-  pinMode(MOTOR_RIGHT_PWM, OUTPUT);
   stopMotors();
 
   leftArmServo.attach(LEFT_SERVO_PIN);
   rightArmServo.attach(RIGHT_SERVO_PIN);
   openArms();
+  delay(2000);
+  closeArms();
 
   Serial.println("Connecting to HuskyLens...");
   while (!huskylens.begin(Wire)) {
@@ -112,9 +96,6 @@ void setup() {
     delay(1000);
   }
   Serial.println("HuskyLens connected!");
-
-  // Make sure the sensor is actually in color-recognition mode, since the
-  // IDs/names below only make sense in that algorithm.
   huskylens.writeAlgorithm(ALGORITHM_COLOR_RECOGNITION);
 
   setNameWithRetry("Orange", 1);
@@ -124,9 +105,23 @@ void setup() {
   setNameWithRetry("Cyan", 5);
   setNameWithRetry("Red", 6);
 
-  // Optional: rush into the pile once to scatter the stones. Blocking here
-  // is fine since it's a one-off move before the main loop starts.
-  // startCeremony();
+  Serial.print("Connecting to WiFi");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(300);
+    Serial.print(".");
+  }
+  Serial.println();
+  Serial.print("ESP32 IP address: ");
+  Serial.println(WiFi.localIP());  // handy to confirm WiFi connected
+
+  udp.begin(LOCAL_UDP_PORT);
+
+  // วิ่งชนหินเหมือน snooker
+  forward();
+  delay(5000);
+  stopMotors();
+
 }
 
 void loop() {
@@ -137,25 +132,24 @@ void loop() {
   }
 
   if (placing_mode) {
-    // TODO: placing code goes here (next phase - not covered yet).
+    runPlacingState();
   }
 }
 
-// ----------------------------------------------------------------------
-// Reads one fresh frame from HuskyLens and fills `blocks[]` /`blockCount`
-// with every COMMAND_RETURN_BLOCK result. Called once per loop() so the
-// state machine below is always acting on current data.
-// ----------------------------------------------------------------------
+// ============================================================
+// Pickup mode 
+// ============================================================
+
 void readHuskyLens() {
   blockCount = 0;
-
   if (!huskylens.request()) {
     Serial.println("Request failed!");
     return;
   }
-
   while (huskylens.available() && blockCount < MAX_BLOCKS) {
     HUSKYLENSResult r = huskylens.read();
+    // get a struct of detected block info
+
     if (r.command == COMMAND_RETURN_BLOCK) {
       blocks[blockCount] = r;
       blockCount++;
@@ -163,12 +157,11 @@ void readHuskyLens() {
   }
 }
 
-// Picks the biggest (= nearest) detected stone this frame, since several
-// of the 6 colors will often be visible at once in a scattered flock.
 int findLargestBlock() {
   int bestIdx = -1;
   long bestSize = -1;
   for (int i = 0; i < blockCount; i++) {
+    // find largest detected block by it's area
     long size = (long)blocks[i].width * (long)blocks[i].height;
     if (size > bestSize) {
       bestSize = size;
@@ -178,17 +171,12 @@ int findLargestBlock() {
   return bestIdx;
 }
 
-// ----------------------------------------------------------------------
-// One tick of the pickup state machine. targetIdx is -1 if no block was
-// seen this frame, otherwise it indexes into blocks[].
-// ----------------------------------------------------------------------
 void runPickupState(int targetIdx) {
   switch (pickupState) {
 
     case SEARCHING:
       openArms();
       if (targetIdx == -1) {
-        // หันจนกว่าจะเจอ - turn until a stone is found
         turnSearch();
       } else {
         Serial.println("Stone detected!");
@@ -198,18 +186,15 @@ void runPickupState(int targetIdx) {
       break;
 
     case CENTERING:
+    // if target block disappear
       if (targetIdx == -1) {
-        // lost the stone (moved out of frame) - go back to searching
         pickupState = SEARCHING;
         break;
       }
       {
         int xC = blocks[targetIdx].xCenter;
         if (xC < FRAME_CENTER_MIN) {
-          // TODO: double-check this matches your camera's left/right
-          // mounting - swap turnLeft()/turnRight() here if it turns the
-          // wrong way on the real robot.
-          turnRight();
+          turnRight();  // TODO: verify direction matches your camera mount
         } else if (xC > FRAME_CENTER_MAX) {
           turnLeft();
         } else {
@@ -226,18 +211,15 @@ void runPickupState(int targetIdx) {
       }
       {
         int xC = blocks[targetIdx].xCenter;
-        // if it drifted off-center while we were driving forward, recenter first
         if (xC < FRAME_CENTER_MIN || xC > FRAME_CENTER_MAX) {
           pickupState = CENTERING;
           break;
         }
-
         long boxSize = (long)blocks[targetIdx].width * (long)blocks[targetIdx].height;
         if (boxSize >= minimum_box_size) {
           stopMotors();
           pickupState = PICKING;
         } else {
-          Serial.println("Still can't pick up the stone, need to go closer!");
           forward();
         }
       }
@@ -245,30 +227,19 @@ void runPickupState(int targetIdx) {
 
     case PICKING: {
       color_id = blocks[targetIdx].ID;
-
       Serial.print("Picking stone, ID = ");
       Serial.println(color_id);
       printColorName(color_id);
 
-      Serial.print("Block: x=");
-      Serial.print(blocks[targetIdx].xCenter);
-      Serial.print(", y=");
-      Serial.print(blocks[targetIdx].yCenter);
-      Serial.print(", width=");
-      Serial.print(blocks[targetIdx].width);
-      Serial.print(", height=");
-      Serial.print(blocks[targetIdx].height);
-      Serial.print(", box_size=");
-      Serial.println((long)blocks[targetIdx].width * (long)blocks[targetIdx].height);
-
       Serial.println("Closing arms!");
       closeArms();
-      delay(400); // TODO: calibrate - give the servos time to actually close before driving off
+      delay(2000);  // let the servos actually finish closing before driving off
 
       Serial.println("Switching to placing mode!");
-      pick_up_mode  = false;
-      placing_mode  = true;
-      pickupState   = SEARCHING; // reset, ready for the next pickup cycle later
+      pick_up_mode = false;
+      placing_mode = true;
+      needToAnnouncePickup = true;
+      pickupState = SEARCHING;  // reset, ready for the next pickup cycle later
       break;
     }
   }
@@ -315,6 +286,13 @@ void forward() {
   analogWrite(MOTOR_RIGHT_PWM, DRIVE_SPEED);
 }
 
+void backward() {
+  digitalWrite(MOTOR_LEFT_IN1, LOW);  digitalWrite(MOTOR_LEFT_IN2, HIGH);  
+  digitalWrite(MOTOR_RIGHT_IN1, LOW); digitalWrite(MOTOR_RIGHT_IN2, HIGH);     
+  analogWrite(MOTOR_LEFT_PWM, DRIVE_SPEED);
+  analogWrite(MOTOR_RIGHT_PWM, DRIVE_SPEED);
+}
+
 void turnLeft() {
   digitalWrite(MOTOR_LEFT_IN1, LOW);   digitalWrite(MOTOR_LEFT_IN2, HIGH);
   digitalWrite(MOTOR_RIGHT_IN1, HIGH); digitalWrite(MOTOR_RIGHT_IN2, LOW);
@@ -337,16 +315,60 @@ void stopMotors() {
 }
 
 void turnSearch() {
-  // หันจนกว่าจะเจอ - simple constant-direction search turn.
-  // TODO: consider a sweep pattern (turn a bit, pause, re-check) instead of
-  // spinning continuously, so HuskyLens has time to lock onto a stone.
-  turnRight();
+  turnRight();  // simple constant-direction search; could add a sweep pattern later
 }
 
-// Optional one-time startup move: rush into the pile to scatter stones.
-// Blocking is OK here since it only runs once, before loop() takes over.
-void startCeremony() {
-  forward();
-  delay(1200); // TODO: tune distance/duration for your field
-  stopMotors();
+// ============================================================
+// Placing mode - driven by UDP commands from field_vision.py
+// ============================================================
+
+void runPlacingState() {
+  if (needToAnnouncePickup) {
+    udp.beginPacket(LAPTOP_IP, LAPTOP_PORT);
+    udp.print("PICKED,");
+    udp.print(color_id);
+    udp.endPacket();
+    needToAnnouncePickup = false;
+    lastNavPacketTime = millis();  // don't immediately trip the timeout below
+  }
+
+  int packetSize = udp.parsePacket();
+  if (packetSize > 0) {
+    int len = udp.read(packetBuffer, sizeof(packetBuffer) - 1);
+    if (len > 0) packetBuffer[len] = '\0';
+    lastNavCommand = String(packetBuffer);
+    lastNavPacketTime = millis();
+  }
+
+  // Safety: if the laptop goes quiet (WiFi hiccup, script crashed, etc.),
+  // stop rather than keep blindly executing the last command forever.
+  if (millis() - lastNavPacketTime > NAV_TIMEOUT_MS) {
+    stopMotors();
+    return;
+  }
+
+  if (lastNavCommand == "TURN_LEFT") {
+    turnLeft();
+  } else if (lastNavCommand == "TURN_RIGHT") {
+    turnRight();
+  } else if (lastNavCommand == "FORWARD") {
+    forward();
+  } else if (lastNavCommand == "STOP") {
+    stopMotors();
+  } else if (lastNavCommand == "ARRIVED") {
+    stopMotors();
+    Serial.println("Arrived at zone, releasing stone!");
+    openArms();
+    delay(2000);  // let the servos actually finish opening
+    // move back so the arm don't sweep the stone out of area
+    backward();
+    delay(2000);
+    stopMotors();
+
+    lastNavCommand = "";
+    color_id = -1;
+    placing_mode = false;
+    pick_up_mode = true;
+    pickupState = SEARCHING;
+  }
 }
