@@ -1,4 +1,4 @@
-"""
+<img width="1202" height="693" alt="Field+cord" src="https://github.com/user-attachments/assets/a120a48d-4600-4ff7-8f8a-329b912485f7" />"""
 field_vision.py
 ----------------
 Runs on the laptop/PC next to the field (NOT on the ESP32).
@@ -45,3 +45,16 @@ COLOR_ZONES = {
     5: (100, 20),    # Cyan     TODO
     6: (100, 130),   # Red      TODO
 }
+
+Pixel Coordinates from field camera 
+
+Upper Left Corner:  176, 4
+Upper Right Corner: 1908, 46
+Lower Left Corner:  180, 1010
+Lower Right Corner: 1867, 1055
+Green:  419, 373
+Purple: 407, 745
+Red:    816, 174
+Blue:   1175, 198
+Cyan:   816, 901
+Orange: 1158, 894
