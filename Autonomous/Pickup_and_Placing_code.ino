@@ -89,6 +89,7 @@ void setup() {
   openArms();
   delay(2000);
   closeArms();
+  stopMotors();
 
   Serial.println("Connecting to HuskyLens...");
   while (!huskylens.begin(Wire)) {
@@ -234,6 +235,7 @@ void runPickupState(int targetIdx) {
       Serial.println("Closing arms!");
       closeArms();
       delay(2000);  // let the servos actually finish closing before driving off
+      stopMotors();
 
       Serial.println("Switching to placing mode!");
       pick_up_mode = false;
@@ -361,6 +363,7 @@ void runPlacingState() {
     openArms();
     delay(2000);  // let the servos actually finish opening
     // move back so the arm don't sweep the stone out of area
+    stopMotors();
     backward();
     delay(2000);
     stopMotors();
