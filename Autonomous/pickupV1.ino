@@ -178,6 +178,19 @@ void setup() {
   inengmotor.begin();
   stopMotors();
 
+  /* set this in InEngMotor.cpp
+  void InEngMotor::begin() {
+  // Arduino-ESP32 3.x LEDC API:
+  // ledcAttachChannel(pin, frequency, resolution, channel)
+  ledcAttachChannel(_motorAIn1, _pwmFrequency, _pwmResolution, 4);
+  ledcAttachChannel(_motorAIn2, _pwmFrequency, _pwmResolution, 5);
+  ledcAttachChannel(_motorBIn1, _pwmFrequency, _pwmResolution, 6);
+  ledcAttachChannel(_motorBIn2, _pwmFrequency, _pwmResolution, 7);
+
+  stopAllMotors();
+}
+  */
+
   // วิ่งชนหินเหมือน snooker
   //forward();
   //delay(5000);
