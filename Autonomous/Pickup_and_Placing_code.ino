@@ -29,28 +29,28 @@ char packetBuffer[64];
 
 // ---------------- Servo (gripper) ----------------
 // Recommended ESP32 PWM-capable pins: 2,4,12-19,21-23,25-27,32-33
-const int LEFT_SERVO_PIN  = 13;   // TODO match your wiring
-const int RIGHT_SERVO_PIN = 14;
+const int LEFT_SERVO_PIN  = 19;   // TODO match your wiring
+const int RIGHT_SERVO_PIN = 32;
 
 const int LEFT_ARM_OPEN_ANGLE   = 60;
-const int LEFT_ARM_CLOSE_ANGLE  = 130;
+const int LEFT_ARM_CLOSE_ANGLE  = 99;
 const int RIGHT_ARM_OPEN_ANGLE  = 130;
-const int RIGHT_ARM_CLOSE_ANGLE = 60;
+const int RIGHT_ARM_CLOSE_ANGLE = 81;
 
 Servo leftArmServo;
 Servo rightArmServo;
 
 // ---------------- Motor driver (placeholder - adjust to your driver) ----------------
-const int MOTOR_LEFT_IN1  = 26;
-const int MOTOR_LEFT_IN2  = 27;
-const int MOTOR_RIGHT_IN1 = 32;
-const int MOTOR_RIGHT_IN2 = 33;
-const int MOTOR_LEFT_PWM  = 25;
-const int MOTOR_RIGHT_PWM = 4;
+const int MOTOR_LEFT_IN1  = ;
+const int MOTOR_LEFT_IN2  = ;
+const int MOTOR_RIGHT_IN1 = ;
+const int MOTOR_RIGHT_IN2 = ;
+const int MOTOR_LEFT_PWM  = ;
+const int MOTOR_RIGHT_PWM = ;
 
 
-const int DRIVE_SPEED = 150;  // 0-255, tune for your motors
-const int TURN_SPEED  = 120;  // 0-255, tune for your motors
+const int DRIVE_SPEED = 50;  // 0-255, tune for your motors
+const int TURN_SPEED  = 50;  // 0-255, tune for your motors
 
 // ---------------- HuskyLens frame / target selection ----------------
 const int FRAME_CENTER_MIN = 120;
@@ -71,7 +71,7 @@ bool pick_up_mode = true;
 bool placing_mode = false;
 bool needToAnnouncePickup = false;
 
-long minimum_box_size = 3000;  // TODO calibrate
+long minimum_box_size = 2800;  // TODO calibrate
 
 // ---------------- Placing mode ----------------
 String lastNavCommand = "";
@@ -135,6 +135,8 @@ void setup() {
   forward();
   delay(5000);
   stopMotors();
+  turnRight();
+  delay(2000);
 
 }
 
@@ -187,7 +189,8 @@ int findLargestBlock() {
 
 void runPickupState(int targetIdx) {
   switch (pickupState) {
-
+    
+// to do
     case SEARCHING:
       openArms();
       if (targetIdx == -1) {
