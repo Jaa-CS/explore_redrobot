@@ -8,18 +8,7 @@ from mediapipe.tasks.python import vision
 # --- ตั้งค่า IP Address ของ ESP32 และ Port ---
 ESP32_IP = "10.164.108.67"  # เปลี่ยนเป็น IP ของ ESP32
 ESP32_PORT = 4210
-
-# ==========================================
-# --- ตั้งค่าความเร็วแยกตามการทำงาน (0-255) ---
-# ==========================================
-# 1. ความเร็วตอนเดินหน้า / ถอยหลัง (F / B)
-FORWARD_LEFT_SPEED = 120   # ล้อซ้ายเดินหน้า
-FORWARD_RIGHT_SPEED = 120  # ล้อขวาเดินหน้า
-
-# 2. ความเร็วตอนเลี้ยว (L / R) - ปรับลดลงถ้าเลี้ยวไวเกินไป
-TURN_LEFT_SPEED = 90       # ความเร็วล้อตอนสั่งเลี้ยวซ้าย (L)
-TURN_RIGHT_SPEED = 90      # ความเร็วล้อตอนสั่งเลี้ยวขวา (R)
-# ==========================================
+FIXED_SPEED = 120
 
 # สร้าง Socket แบบ UDP
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -39,14 +28,13 @@ cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 last_cmd = ""
-last_left_speed = 0
-last_right_speed = 0
+last_speed = 0
 last_sent_time = 0
-SEND_INTERVAL = 0.375 
+SEND_INTERVAL = 0.375  # ส่งซ้ำทุกๆ 0.375 วินาที เพื่อป้องกันแพ็กเกจหลุด
 
 
-def send_udp(cmd, left_speed, right_speed):
-    message = f"{cmd},{left_speed},{right_speed}"
+def send_udp(cmd, speed):
+    message = f"{cmd},{speed}"
     sock.sendto(message.encode("utf-8"), (ESP32_IP, ESP32_PORT))
 
 
@@ -72,9 +60,27 @@ def get_finger_status(landmarks):
 def draw_hand_landmarks(image, landmark_list):
     h, w, _ = image.shape
     hand_connections = [
-        (0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (5, 6), (6, 7), (7, 8),
-        (5, 9), (9, 10), (10, 11), (11, 12), (9, 13), (13, 14), (14, 15),
-        (15, 16), (13, 17), (17, 18), (18, 19), (19, 20), (0, 17),
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 4),
+        (0, 5),
+        (5, 6),
+        (6, 7),
+        (7, 8),
+        (5, 9),
+        (9, 10),
+        (10, 11),
+        (11, 12),
+        (9, 13),
+        (13, 14),
+        (14, 15),
+        (15, 16),
+        (13, 17),
+        (17, 18),
+        (18, 19),
+        (19, 20),
+        (0, 17),
     ]
 
     points = []
@@ -101,8 +107,7 @@ while cap.isOpened():
     detection_result = detector.detect(mp_image)
 
     cmd = "S"
-    l_spd = 0
-    r_spd = 0
+    speed = 0
 
     if detection_result.hand_landmarks:
         for hand_landmarks in detection_result.hand_landmarks:
@@ -111,49 +116,47 @@ while cap.isOpened():
 
             if fingers == [False, False, False, False, False]:
                 cmd = "S"
-                l_spd, r_spd = 0, 0
+                speed = 0
             elif fingers == [True, False, False, False, False]:
                 cmd = "F"
-                l_spd, r_spd = FORWARD_LEFT_SPEED, FORWARD_RIGHT_SPEED
+                speed = FIXED_SPEED
             elif fingers == [False, True, False, False, False]:
                 cmd = "B"
-                l_spd, r_spd = FORWARD_LEFT_SPEED, FORWARD_RIGHT_SPEED
+                speed = FIXED_SPEED
             elif fingers == [False, False, False, False, True]:
                 cmd = "L"
-                # ใช้ความเร็วสำหรับการเลี้ยวซ้าย
-                l_spd, r_spd = TURN_LEFT_SPEED, TURN_LEFT_SPEED
+                speed = FIXED_SPEED
             elif fingers == [False, True, True, False, False]:
                 cmd = "R"
-                # ใช้ความเร็วสำหรับการเลี้ยวขวา
-                l_spd, r_spd = TURN_RIGHT_SPEED, TURN_RIGHT_SPEED
+                speed = FIXED_SPEED
+            # --- เพิ่มท่าทางสำหรับ Gripper ---
             elif fingers == [True, True, True, True, True]:
-                cmd = "G_OFF"  # ปล่อยก้ามปู
-                l_spd, r_spd = 0, 0
+                cmd = "G_OFF"  # แบมือ 5 นิ้ว = ปล่อย
+                speed = 0
             elif fingers == [False, True, True, True, True]:
-                cmd = "G_ON"   # หนีบก้ามปู
-                l_spd, r_spd = 0, 0
+                cmd = "G_ON"   # ชู 4 นิ้ว (หดนิ้วโป้ง) = หนีบ
+                speed = 0
             else:
                 cmd = "S"
-                l_spd, r_spd = 0, 0
+                speed = 0
     else:
         cmd = "S"
-        l_spd, r_spd = 0, 0
+        speed = 0
 
     current_time = time.time()
 
-    if cmd != last_cmd or l_spd != last_left_speed or r_spd != last_right_speed:
-        send_udp(cmd, l_spd, r_spd)
+    if cmd != last_cmd or speed != last_speed:
+        send_udp(cmd, speed)
         last_cmd = cmd
-        last_left_speed = l_spd
-        last_right_speed = r_spd
+        last_speed = speed
         last_sent_time = current_time
     elif current_time - last_sent_time >= SEND_INTERVAL:
-        send_udp(cmd, l_spd, r_spd)
+        send_udp(cmd, speed)
         last_sent_time = current_time
 
     cv2.putText(
         frame,
-        f"CMD: {cmd} | L: {l_spd} R: {r_spd}",
+        f"CMD: {cmd} | Speed: {speed}",
         (30, 50),
         cv2.FONT_HERSHEY_SIMPLEX,
         1,
