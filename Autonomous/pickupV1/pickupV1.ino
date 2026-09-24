@@ -2,35 +2,20 @@
 #include <Wire.h>
 #include <ESP32Servo.h>
 #include  <InEngMotor.h>
-//#include <WiFi.h>
-//#include <WiFiUdp.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
 
 HUSKYLENS huskylens;
 
-// ---------------- WiFi / UDP ----------------
-// const char* WIFI_SSID     = "YOUR_WIFI_NAME";      // TODO
-// const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";  // TODO
+const char *ssid = "RedRobotINWZA";
+const char *password = "GUJAPENBALAEW67"; // รหัสผ่านต้องมากกว่า 8 ตัวอักษร หรือปล่อยว่างหากไม่ต้องการตั้งรหัส
+
 
 // const unsigned int LOCAL_UDP_PORT = 4210;  // this ESP32 listens here for nav commands
 // const char* LAPTOP_IP   = "192.168.1.20";  // TODO: your laptop's IP (check with ipconfig/ifconfig)
 // const unsigned int LAPTOP_PORT = 4211;     // must match LISTEN_PORT in field_vision.py
 
-// IPAddress local_IP(192, 168, 1, 50);   // the fixed IP you want the ESP32 to have
-// IPAddress gateway(192, 168, 1, 1);     // your router's IP (see below)
-// IPAddress subnet(255, 255, 255, 0);    // usually this for small networks
-
-
-// Tip: WiFi routers hand out IPs by DHCP, which can change between matches.
-// If possible, reserve a static IP for both the laptop and the ESP32 on
-// your router (or use WiFi.config() below) so you don't have to re-check
-// and re-flash these addresses before every run.
-
-// WiFiUDP udp;
-// char packetBuffer[64];
-
-// ---------------- Servo (gripper) ----------------
-// Recommended ESP32 PWM-capable pins: 2,4,12-19,21-23,25-27,32-33
-const int LEFT_SERVO_PIN  = 19;   // TODO match your wiring
+const int LEFT_SERVO_PIN  = 19;   
 const int RIGHT_SERVO_PIN = 32;
 
 const int LEFT_ARM_OPEN_ANGLE   = 0;
@@ -40,19 +25,6 @@ const int RIGHT_ARM_CLOSE_ANGLE = 81;
 
 Servo leftArmServo;
 Servo rightArmServo;
-
-// ---------------- Motor driver (placeholder - adjust to your driver) ----------------
-/*
-const int MOTOR_LEFT_IN1  = 26;
-const int MOTOR_LEFT_IN2  = 27;
-const int MOTOR_RIGHT_IN1 = 32;
-const int MOTOR_RIGHT_IN2 = 33;
-const int MOTOR_LEFT_PWM  = 25;
-const int MOTOR_RIGHT_PWM = 4;
-*/
-
-const int DRIVE_SPEED = 50;  // 0-255, tune for your motors
-const int TURN_SPEED  = 50;  // 0-255, tune for your motors
 
 // ---------------- HuskyLens frame / target selection ----------------
 const int FRAME_CENTER_MIN = 120;
@@ -71,14 +43,14 @@ bool close_servo = true;   // reflects current gripper state (false = open)
 int  color_id = -1;         // color ID of the stone currently held
 bool pick_up_mode = true;
 bool placing_mode = false;
-//bool needToAnnouncePickup = false;
+bool needToAnnouncePickup = false;
 
 long minimum_box_size = 6800;  // TODO calibrate
 
 // ---------------- Placing mode ----------------
-// String lastNavCommand = "";
-// unsigned long lastNavPacketTime = 0;
-// const unsigned long NAV_TIMEOUT_MS = 1000;  // stop driving if the laptop goes quiet
+String lastNavCommand = "";
+unsigned long lastNavPacketTime = 0;
+const unsigned long NAV_TIMEOUT_MS = 1000;  // stop driving if the laptop goes quiet
 // ---------------- ------------- ---------------
 
 
@@ -126,13 +98,6 @@ void setup() {
   rightArmServo.setPeriodHertz(50);
   leftArmServo.attach(LEFT_SERVO_PIN);
   rightArmServo.attach(RIGHT_SERVO_PIN);
-
-  /*
-  pinMode(MOTOR_LEFT_IN1, OUTPUT);
-  pinMode(MOTOR_LEFT_IN2, OUTPUT);
-  pinMode(MOTOR_RIGHT_IN1, OUTPUT);
-  pinMode(MOTOR_RIGHT_IN2, OUTPUT);
-  */
 
   closeArms();
   delay(5000);
@@ -186,10 +151,10 @@ void setup() {
   ledcAttachChannel(_motorAIn2, _pwmFrequency, _pwmResolution, 5);
   ledcAttachChannel(_motorBIn1, _pwmFrequency, _pwmResolution, 6);
   ledcAttachChannel(_motorBIn2, _pwmFrequency, _pwmResolution, 7);
-
-  stopAllMotors();
-}
   */
+
+}
+  
 
   // วิ่งชนหินเหมือน snooker
   //forward();
@@ -206,11 +171,10 @@ void loop() {
     int targetIdx = findLargestBlock();
     runPickupState(targetIdx);
   }
-/*
+
   if (placing_mode) {
     runPlacingState();
   }
-  */
 }
 
 // ============================================================
@@ -328,9 +292,9 @@ void runPickupState(int targetIdx) {
       stopMotors();
 
       Serial.println("Switching to placing mode!");
-      //pick_up_mode = false;
-      //placing_mode = true;
-      //needToAnnouncePickup = true;
+      pick_up_mode = false;
+      placing_mode = true;
+      needToAnnouncePickup = true;
       pickupState = SEARCHING;  // reset, ready for the next pickup cycle later
       break;
     }
