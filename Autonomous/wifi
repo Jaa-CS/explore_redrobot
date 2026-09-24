@@ -1,0 +1,28 @@
+#include <WiFi.h>
+
+// กำหนดชื่อ Wi-Fi (SSID) และรหัสผ่านที่ต้องการสร้าง
+const char *ssid = "ESP32_Access_Point";
+const char *password = "12345678"; // รหัสผ่านต้องมากกว่า 8 ตัวอักษร หรือปล่อยว่างหากไม่ต้องการตั้งรหัส
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  // ตั้งค่าโหมดให้เป็น Access Point
+  WiFi.mode(WIFI_AP);
+
+  // เริ่มต้นปล่อยสัญญาณ Wi-Fi
+  bool result = WiFi.softAP(ssid, password);
+  
+  if (result) {
+    Serial.println("SoftAP ตั้งค่าสำเร็จ!");
+    Serial.print("IP Address ของ ESP32: ");
+    Serial.println(WiFi.softAPIP()); // ค่าเริ่มต้นมักเป็น 192.168.4.1
+  } else {
+    Serial.println("SoftAP ตั้งค่าไม่สำเร็จ!");
+  }
+}
+
+void loop() {
+  // ไม่ต้องใส่โค้ดในลูปสำหรับการทำงานพื้นฐาน
+}
