@@ -17,7 +17,7 @@ SEND_INTERVAL = 0.3       # วินาที - กันส่งคำสั�
 # ปุ่มตัวเลข 1-6 ใช้จำลองสีอัญมณีตอนยังไม่ได้ต่อ HuskyLens จริง
 COLOR_KEYS = {
     ord("1"): "CYAN",
-    ord("2"): "CRIMSON",
+    ord("2"): "RED",
     ord("3"): "VIOLET",
     ord("4"): "BLUE",
     ord("5"): "ORANGE",
