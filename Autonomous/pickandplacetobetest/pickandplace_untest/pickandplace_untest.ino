@@ -1,7 +1,7 @@
 #include <HUSKYLENS.h>
 #include <Wire.h>
 #include <ESP32Servo.h>
-#include  <InEngMotor.h>
+#include <InEngMotor.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
@@ -10,10 +10,13 @@ HUSKYLENS huskylens;
 const char *ssid = "RedRobotINWZA";
 const char *password = "GUJAPENBALAEW67"; // รหัสผ่านต้องมากกว่า 8 ตัวอักษร หรือปล่อยว่างหากไม่ต้องการตั้งรหัส
 
+WiFiUDP udp;
 
-// const unsigned int LOCAL_UDP_PORT = 4210;  // this ESP32 listens here for nav commands
-// const char* LAPTOP_IP   = "192.168.1.20";  // TODO: your laptop's IP (check with ipconfig/ifconfig)
-// const unsigned int LAPTOP_PORT = 4211;     // must match LISTEN_PORT in field_vision.py
+const unsigned int LOCAL_UDP_PORT = 4210;
+const unsigned int LAPTOP_PORT = 4211;
+
+IPAddress laptopIP;
+bool laptopKnown = false;
 
 const int LEFT_SERVO_PIN  = 19;   
 const int RIGHT_SERVO_PIN = 32;
@@ -43,14 +46,28 @@ bool close_servo = true;   // reflects current gripper state (false = open)
 int  color_id = -1;         // color ID of the stone currently held
 bool pick_up_mode = true;
 bool placing_mode = false;
-bool needToAnnouncePickup = false;
 
 long minimum_box_size = 6800;  // TODO calibrate
 
 // ---------------- Placing mode ----------------
 String lastNavCommand = "";
 unsigned long lastNavPacketTime = 0;
-const unsigned long NAV_TIMEOUT_MS = 1000;  // stop driving if the laptop goes quiet
+const unsigned long NAV_TIMEOUT_MS = 1000;  // stop driving if the laptop goes quiet mid-drive
+
+// UDP can drop packets, so PICKED and PLACED are each resent on a timer
+// until the laptop acknowledges them - a single fire-and-forget send is
+// what let one lost packet freeze the whole run before.
+const unsigned long RESEND_PERIOD_MS = 300;   // how often to repeat PICKED/PLACED until acked
+const unsigned long PLACED_GIVEUP_MS = 3000;  // the stone is already physically released by the
+                                               // time we send PLACED, so if no ack comes back in
+                                               // time, just resume pickup instead of waiting forever
+
+bool waitingForPickedAck = false;
+unsigned long lastPickedSendTime = 0;
+
+bool waitingForPlacedAck = false;
+unsigned long lastPlacedSendTime = 0;
+unsigned long placedWaitStart = 0;
 // ---------------- ------------- ---------------
 
 
@@ -119,29 +136,28 @@ void setup() {
   setNameWithRetry("Cyan", 5);
   setNameWithRetry("Red", 6);
 
-  /*
-  if (!WiFi.config(local_IP, gateway, subnet)) {
-    Serial.println("Static IP config failed!");
-  }
-
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(300);
-    Serial.print(".");
-  }
-  Serial.println();
-  Serial.print("ESP32 IP: ");
-  Serial.println(WiFi.localIP());  // should now print 192.168.1.50 every time
-}
-
-  Serial.println();
-  Serial.print("ESP32 IP address: ");
-  Serial.println(WiFi.localIP());  // handy to confirm WiFi connected
-
-  udp.begin(LOCAL_UDP_PORT);
-*/
   inengmotor.begin();
   stopMotors();
+
+  // ตั้งค่าโหมดให้เป็น Access Point
+  WiFi.mode(WIFI_AP);
+
+  // เริ่มต้นปล่อยสัญญาณ Wi-Fi
+  bool result = WiFi.softAP(ssid, password);
+  
+  if (result) {
+    Serial.println("SoftAP ตั้งค่าสำเร็จ!");
+    Serial.print("IP Address ของ ESP32: ");
+    Serial.println(WiFi.softAPIP()); // ค่าเริ่มต้นมักเป็น 192.168.4.1
+  } else {
+    Serial.println("SoftAP ตั้งค่าไม่สำเร็จ!");
+  }
+
+  udp.begin(LOCAL_UDP_PORT);
+
+  Serial.print("UDP listening on port ");
+  Serial.println(LOCAL_UDP_PORT);
+
 
   /* set this in InEngMotor.cpp
   void InEngMotor::begin() {
@@ -152,10 +168,7 @@ void setup() {
   ledcAttachChannel(_motorBIn1, _pwmFrequency, _pwmResolution, 6);
   ledcAttachChannel(_motorBIn2, _pwmFrequency, _pwmResolution, 7);
   */
-
-}
   
-
   // วิ่งชนหินเหมือน snooker
   //forward();
   //delay(5000);
@@ -166,6 +179,11 @@ void setup() {
 }
 
 void loop() {
+
+  receiveUDP();
+  checkNavigationTimeout();
+
+
   if (pick_up_mode) {
     readHuskyLens();
     int targetIdx = findLargestBlock();
@@ -294,8 +312,14 @@ void runPickupState(int targetIdx) {
       Serial.println("Switching to placing mode!");
       pick_up_mode = false;
       placing_mode = true;
-      needToAnnouncePickup = true;
       pickupState = SEARCHING;  // reset, ready for the next pickup cycle later
+
+      // Clear out anything left over from a previous cycle (e.g. a stale
+      // "ARRIVED" from before), then start announcing the pickup -
+      // runPlacingState() resends "PICKED,<id>" every loop until acked.
+      lastNavCommand = "";
+      waitingForPickedAck = true;
+      lastPickedSendTime = 0;
       break;
     }
   }
@@ -339,30 +363,17 @@ void openArms() {
 // Placing mode - driven by UDP commands from field_vision.py
 // ============================================================
 
-/*
+
 void runPlacingState() {
-  if (needToAnnouncePickup) {
-    udp.beginPacket(LAPTOP_IP, LAPTOP_PORT);
-    udp.print("PICKED,");
-    udp.print(color_id);
-    udp.endPacket();
-    needToAnnouncePickup = false;
-    lastNavPacketTime = millis();  // don't immediately trip the timeout below
-  }
-
-  int packetSize = udp.parsePacket();
-  if (packetSize > 0) {
-    int len = udp.read(packetBuffer, sizeof(packetBuffer) - 1);
-    if (len > 0) packetBuffer[len] = '\0';
-    lastNavCommand = String(packetBuffer);
-    lastNavPacketTime = millis();
-  }
-
-  // Safety: if the laptop goes quiet (WiFi hiccup, script crashed, etc.),
-  // stop rather than keep blindly executing the last command forever.
-  if (millis() - lastNavPacketTime > NAV_TIMEOUT_MS) {
-    stopMotors();
-    return;
+  // Step 1: make sure the laptop actually knows we're holding a stone.
+  // Keep repeating "PICKED,<id>" until it replies "ACK_PICKED" - no ack
+  // means the packet may never have arrived.
+  if (waitingForPickedAck) {
+    if (millis() - lastPickedSendTime > RESEND_PERIOD_MS) {
+      sendUDP("PICKED," + String(color_id));
+      lastPickedSendTime = millis();
+    }
+    return;  // don't act on nav commands until the handshake is done
   }
 
   if (lastNavCommand == "TURN_LEFT") {
@@ -373,22 +384,114 @@ void runPlacingState() {
     forward();
   } else if (lastNavCommand == "STOP") {
     stopMotors();
-  } else if (lastNavCommand == "ARRIVED") {
+  } else if (lastNavCommand == "ARRIVED" && !waitingForPlacedAck) {
     stopMotors();
     Serial.println("Arrived at zone, releasing stone!");
     openArms();
     delay(2000);  // let the servos actually finish opening
-    // move back so the arm don't sweep the stone out of area
-    stopMotors();
-    backward();
+    backward();   // move back so the arm doesn't sweep the stone out of the zone
     delay(2000);
     stopMotors();
 
-    lastNavCommand = "";
-    color_id = -1;
-    placing_mode = false;
-    pick_up_mode = true;
-    pickupState = SEARCHING;
+    waitingForPlacedAck = true;
+    placedWaitStart = millis();
+    lastPlacedSendTime = 0;  // send the first "PLACED" immediately, below
+  }
+
+  // Step 2: same idea in reverse - keep telling the laptop the stone is
+  // placed until it acknowledges, so a lost packet can't leave the laptop
+  // stuck in "RELEASING" forever (which would silently break the *next*
+  // pickup's navigation too).
+  if (waitingForPlacedAck) {
+    if (millis() - placedWaitStart > PLACED_GIVEUP_MS) {
+      Serial.println("No ACK_PLACED - resuming pickup anyway (stone is already released).");
+      finishPlacing();
+    } else if (millis() - lastPlacedSendTime > RESEND_PERIOD_MS) {
+      sendUDP("PLACED," + String(color_id));
+      lastPlacedSendTime = millis();
+    }
   }
 }
-*/
+
+void finishPlacing() {
+  waitingForPlacedAck = false;
+  lastNavCommand = "";
+  color_id = -1;
+  placing_mode = false;
+  pick_up_mode = true;
+  pickupState = SEARCHING;
+}
+
+void receiveUDP() {
+  int packetSize = udp.parsePacket();
+
+  if (packetSize <= 0) {
+    return;
+
+  char packet[64];
+
+  int len = udp.read(packet, sizeof(packet) - 1);
+
+  if (len <= 0) {
+    return;
+  }
+
+  packet[len] = '\0';
+
+  String command = String(packet);
+  command.trim();
+
+  // Remember the laptop's IP address
+  laptopIP = udp.remoteIP();
+  laptopKnown = true;
+
+  Serial.print("Received UDP: ");
+  Serial.println(command);
+
+  if (command == "HELLO") {
+    udp.beginPacket(laptopIP, LAPTOP_PORT);
+    udp.print("HELLO_ACK");
+    udp.endPacket();
+
+    Serial.println("Sent HELLO_ACK");
+  }
+
+  else if (command == "ACK_PICKED") {
+    waitingForPickedAck = false;
+  }
+
+  else if (command == "ACK_PLACED") {
+    finishPlacing();
+  }
+
+  else {
+    // Navigation command
+    lastNavCommand = command;
+    lastNavPacketTime = millis();
+  }
+}
+
+void sendUDP(const String &message) {
+  if (!laptopKnown) {
+    return;
+  }
+
+  udp.beginPacket(laptopIP, LAPTOP_PORT);
+  udp.print(message);
+  udp.endPacket();
+
+  Serial.print("Sent UDP: ");
+  Serial.println(message);
+}
+
+void checkNavigationTimeout() {
+
+  if (!placing_mode) {
+    return;
+  }
+
+  if (millis() - lastNavPacketTime > NAV_TIMEOUT_MS) {
+    lastNavCommand = "";
+    stopMotors();
+  }
+}
