@@ -47,7 +47,14 @@ int  color_id = -1;         // color ID of the stone currently held
 bool pick_up_mode = true;
 bool placing_mode = false;
 
-long minimum_box_size = 6800;  // TODO calibrate
+long orange_minimum_box_size = 6200;
+long blue_minimum_box_size = 6600;  
+long purple_minimum_box_size = 6500;
+long green_minimum_box_size = 6500;  
+long cyan_minimum_box_size = 7300;  
+long red_minimum_box_size = 6500;  
+
+
 
 // ---------------- Placing mode ----------------
 String lastNavCommand = "";
@@ -81,28 +88,20 @@ void turnSearch() {
 
 // ---------------- Motor control (placeholder - adjust to your driver) ----------------
 void forward() {
-  inengmotor.forward(200, 200); 
+  inengmotor.forward(180, 178); 
 }
 
 void backward() {
-  inengmotor.backward(200, 200); 
+  inengmotor.backward(179, 181); 
 
 }
 
 void turnLeft() {
-  inengmotor.turnLeft(80, 180);
+  inengmotor.turnLeft(120, 170);
 }
 
 void turnRight() {
-  inengmotor.turnRight(180, 80);
-}
-
-void spinLeft() {
-  inengmotor.spinLeft(80, 80);
-}
-
-void spinRight() {
-  inengmotor.spinRight(80, 80);
+  inengmotor.turnRight(170, 120);
 }
 
 void setup() {
@@ -286,15 +285,42 @@ void runPickupState(int targetIdx) {
           break;
         }
         long boxSize = (long)blocks[targetIdx].width * (long)blocks[targetIdx].height;
-        if (boxSize >= minimum_box_size) {
-          stopMotors();
-          pickupState = PICKING;
-        } else {
-          forward();
-          Serial.println("Moving closer to the stone.");
-          
+        int minimum_box_size = 0;
+
+        switch (blocks[targetIdx].ID) {
+            case 1:
+                minimum_box_size = orange_minimum_box_size;
+                break;
+            case 2:
+                minimum_box_size = blue_minimum_box_size;
+                break;
+            case 3:
+                minimum_box_size = purple_minimum_box_size;
+                break;
+            case 4:
+                minimum_box_size = green_minimum_box_size;
+                break;
+            case 5:
+                minimum_box_size = cyan_minimum_box_size;
+                break;
+            case 6:
+                minimum_box_size = red_minimum_box_size;
+                break;
+            default:
+                minimum_box_size = 0;
+                break;
         }
-      }
+
+        if (minimum_box_size > 0 && boxSize >= minimum_box_size) {
+            stopMotors();
+            pickupState = PICKING;
+        }     
+          else {
+            forward();
+            Serial.println("Moving closer to the stone.");
+            
+          }
+        }
       break;
 
     case PICKING: {
