@@ -496,6 +496,7 @@ void receiveUDP() {
     lastNavPacketTime = millis();
   }
 }
+}
 
 void sendUDP(const String &message) {
   if (!laptopKnown) {
