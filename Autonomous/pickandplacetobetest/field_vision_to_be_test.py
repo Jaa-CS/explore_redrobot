@@ -39,13 +39,25 @@ FIELD_PTS = np.array([
 # Step 3: where each color zone's center is, in the same field units as above.
 # Measure these once the field is set up.
 COLOR_ZONES_PX = {
-    1: (419, 373),     # ซ้ายบน   
-    2: (407, 745),    # ซ้ายล่าง     
-    3: (816, 174),    # กลางบน   
+    1: (419, 373),     # ซ้ายบน 
+    2: (407, 745),    # ซ้ายล่าง   
+    3: (816, 174),    # กลางบน 
     4: (816, 901),     # กลางล่าง    
-    5: (1175, 198),    # ขวาบน     
-    6: (1158, 894),   # ขวาล่าง      
+    5: (1175, 198),    # ขวาบน       
+    6: (1158, 894),   # ขวาล่าง       
 }
+
+'''
+orange blue purple green cyan red 
+COLOR_ZONES_PX = {
+    1: (419, 373),     # ซ้ายบน 
+    2: (407, 745),    # ซ้ายล่าง   
+    3: (816, 174),    # กลางบน 
+    4: (816, 901),     # กลางล่าง    
+    5: (1175, 198),    # ขวาบน       
+    6: (1158, 894),   # ขวาล่าง       
+}
+'''
 
 HEADING_TOLERANCE = math.radians(8)   # how close to "pointed at the target" counts as aligned
 ARRIVAL_RADIUS = 8                    # field units - how close counts as "arrived"
