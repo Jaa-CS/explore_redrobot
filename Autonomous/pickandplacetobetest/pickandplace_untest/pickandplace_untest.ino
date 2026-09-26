@@ -21,10 +21,10 @@ bool laptopKnown = false;
 const int LEFT_SERVO_PIN  = 19;   
 const int RIGHT_SERVO_PIN = 32;
 
-const int LEFT_ARM_OPEN_ANGLE   = 0;
-const int LEFT_ARM_CLOSE_ANGLE  = 99;
-const int RIGHT_ARM_OPEN_ANGLE  = 180;
-const int RIGHT_ARM_CLOSE_ANGLE = 81;
+const int LEFT_ARM_OPEN_ANGLE   = 9;
+const int LEFT_ARM_CLOSE_ANGLE  = 60;
+const int RIGHT_ARM_OPEN_ANGLE  = 171;
+const int RIGHT_ARM_CLOSE_ANGLE = 120;
 
 Servo leftArmServo;
 Servo rightArmServo;
