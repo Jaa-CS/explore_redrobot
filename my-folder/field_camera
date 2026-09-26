@@ -1,178 +1,3 @@
-# import cv2
-# import numpy as np
-# import math
-# import json
-# import os
-
-# # =========================
-# # CONFIG
-# # =========================
-# ARUCO_DICT = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-# ARUCO_PARAMS = cv2.aruco.DetectorParameters()
-# detector = cv2.aruco.ArucoDetector(ARUCO_DICT, ARUCO_PARAMS)
-
-# ROBOT_MARKER_ID = 0  # ID ของ marker ที่ติดบนหุ่น
-
-# CALIBRATION_FILE = "hole_calibration.json"
-# HOLE_LABELS = ["CYAN", "CRIMSON", "VIOLET", "BLUE", "ORANGE", "GREEN"]
-
-
-# # =========================
-# # ROBOT POSE (ArUco)
-# # =========================
-# def find_robot_pose(frame):
-#     """
-#     คืนค่า (robot_x, robot_y, heading_deg, corners_pts) หรือ None ถ้าไม่เจอ marker
-#     """
-#     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) //แปลงจากสีเป็นขาวดำ๖ทำให้เร็วขึ้นและไม่กวนกับสีพื้นหลัง
-#     corners, ids, _ = detector.detectMarkers(gray) //ลิส4มุมของ list aruco และ list ID
-
-#     if ids is None:
-#         return None
-
-#     for i, marker_id in enumerate(ids.flatten()): //วนลูปตรวจสอบ marker แต่ละตัว
-#         if marker_id != ROBOT_MARKER_ID:
-#             continue
-
-#         pts = corners[i][0]  # 4 มุม: top_left, top_right, bottom_right, bottom_left
-#         top_left, top_right = pts[0], pts[1]
-
-#         center = pts.mean(axis=0) //คำนวณจุดกึ่งกลางของ marker
-#         robot_x, robot_y = center[0], center[1]
-
-#         dx = top_right[0] - top_left[0] //หาความต่างของแกน x & y มุมบนซ้ายและบนขวาเพื่อคำนวนหามุม
-#         dy = top_right[1] - top_left[1]
-#         angle = math.degrees(math.atan2(-dy, dx)) //คำนวณมุมของหุ่นในองศา (0-360) โดยใช้ฟังก์ชัน atan2 และแปลงเป็นองศา
-#         if angle < 0:
-#             angle += 360
-
-#         return robot_x, robot_y, angle, pts
-
-#     return None
-
-
-# # =========================
-# # HOLE CALIBRATION (click-based)
-# # =========================
-# def calibrate_holes(cap): //คลิกจำนวนหลุมแต่ละสีตามลำดับเพื่อบันทึกตำแหน่งลงไฟล์ JSON
-#     """
-#     เปิดหน้าต่างให้คลิกกึ่งกลางหลุมแต่ละสีตามลำดับ HOLE_LABELS
-#     บันทึกผลลง CALIBRATION_FILE แล้วคืนค่า dict {label: (x, y)}
-#     """
-#     clicked = []
-
-#     def on_mouse(event, x, y, flags, param): //คลิกเมาส์ซ้ายเพื่อบันทึกตำแหน่งหลุม
-#         if event == cv2.EVENT_LBUTTONDOWN:
-#             clicked.append((x, y))
-
-#     window_name = "Calibrate Holes - click each hole in order (q to abort)"
-#     cv2.namedWindow(window_name)
-#     cv2.setMouseCallback(window_name, on_mouse) //สร้างหน้าต่าง แล้วผูกกับการคลิกกเม้าส์
-
-#     print("=== CALIBRATE HOLES ===")
-#     print("คลิกที่กึ่งกลางหลุมแต่ละสีตามลำดับนี้:")
-#     for lbl in HOLE_LABELS:
-#         print(f" - {lbl}")
-
-#     while len(clicked) < len(HOLE_LABELS): //เลือกยังไม่เสจ
-#         ret, frame = cap.read()
-#         if not ret:
-#             continue
-
-#         display = frame.copy()
-
-#         for i, (cx, cy) in enumerate(clicked):
-#             cv2.circle(display, (cx, cy), 8, (0, 255, 0), -1)
-#             cv2.putText(display, HOLE_LABELS[i], (cx + 10, cy),
-#                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-#         if len(clicked) < len(HOLE_LABELS):
-#             next_label = HOLE_LABELS[len(clicked)]
-#             cv2.putText(display, f"Click on: {next_label} hole", (20, 40),
-#                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-
-#         cv2.imshow(window_name, display)
-#         if cv2.waitKey(1) & 0xFF == ord("q"):
-#             break
-
-#     cv2.destroyWindow(window_name)
-
-#     hole_positions = {HOLE_LABELS[i]: clicked[i] for i in range(len(clicked))}
-
-#     with open(CALIBRATION_FILE, "w") as f:
-#         json.dump(hole_positions, f, indent=2)
-
-#     print("บันทึก calibration เรียบร้อย:", hole_positions)
-#     return hole_positions
-
-
-# def load_hole_calibration():
-#     """คืนค่า dict {label: (x, y)} จากไฟล์ที่เคย calibrate ไว้ หรือ None ถ้ายังไม่มี"""
-#     if not os.path.exists(CALIBRATION_FILE):
-#         return None
-#     with open(CALIBRATION_FILE, "r") as f:
-#         data = json.load(f)
-#     return {k: tuple(v) for k, v in data.items()}
-
-
-# # =========================
-# # STANDALONE PREVIEW / CALIBRATION TOOL
-# # (รันไฟล์นี้ตรงๆ เพื่อทดสอบ ArUco detection + ดูหลุมที่ calibrate ไว้)
-# # กด 'c' เพื่อ calibrate หลุมใหม่, 'q' เพื่อออก
-# # =========================
-# if __name__ == "__main__":
-#     cap = cv2.VideoCapture(0)
-#     if not cap.isOpened():
-#         print("เปิดกล้องไม่ได้")
-#         exit()
-
-#     holes = load_hole_calibration()
-#     if holes is None:
-#         holes = calibrate_holes(cap)
-
-#     while True:
-#         ret, frame = cap.read()
-#         if not ret:
-#             print("อ่านภาพจากกล้องไม่ได้")
-#             break
-
-#         pose = find_robot_pose(frame)
-
-#         if pose is not None:
-#             robot_x, robot_y, angle, pts = pose
-#             pts_int = pts.astype(int)
-#             cv2.polylines(frame, [pts_int], True, (0, 255, 0), 2)
-#             cv2.circle(frame, (int(robot_x), int(robot_y)), 8, (0, 255, 255), -1)
-
-#             arrow_len = 60
-#             end_x = int(robot_x + arrow_len * math.cos(math.radians(angle)))
-#             end_y = int(robot_y - arrow_len * math.sin(math.radians(angle)))
-#             cv2.arrowedLine(frame, (int(robot_x), int(robot_y)), (end_x, end_y),
-#                              (0, 0, 255), 3, tipLength=0.3)
-
-#             cv2.putText(frame, f"X:{robot_x:.0f} Y:{robot_y:.0f} H:{angle:.1f}", (20, 40),
-#                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-#         else:
-#             cv2.putText(frame, "Robot marker not detected", (20, 40),
-#                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-
-#         for label, (hx, hy) in holes.items():
-#             cv2.circle(frame, (hx, hy), 10, (255, 0, 255), 2)
-#             cv2.putText(frame, label, (hx + 12, hy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
-
-#         cv2.putText(frame, "Press 'c' to recalibrate holes, 'q' to quit",
-#                     (20, frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
-#         cv2.imshow("Field Camera", frame)
-#         key = cv2.waitKey(1) & 0xFF
-#         if key == ord("q"):
-#             break
-#         elif key == ord("c"):
-#             holes = calibrate_holes(cap)
-
-#     cap.release()
-#     cv2.destroyAllWindows()
-
 import cv2
 import numpy as np
 import math
@@ -189,7 +14,7 @@ detector = cv2.aruco.ArucoDetector(ARUCO_DICT, ARUCO_PARAMS)
 ROBOT_MARKER_ID = 0  # ID ของ marker ที่ติดบนหุ่น
 
 CALIBRATION_FILE = "hole_calibration.json"
-HOLE_LABELS = ["CYAN", "CRIMSON", "VIOLET", "BLUE", "ORANGE", "GREEN"] //crimson->red
+HOLE_LABELS = ["CYAN", "RED", "VIOLET", "BLUE", "ORANGE", "GREEN"] //crimson->red
 
 # ค่า Hue อ้างอิง (0-179 ตามสเกล OpenCV) - เป็นค่าประมาณ ปรับได้ถ้าทายผิดบ่อย
 # ตรวจสอบง่ายๆ: ตอน calibrate จริง ดูค่า hue ที่ปริ๊นออกทาง console แล้วมาปรับเลขตรงนี้ให้แม่นขึ้น
@@ -197,7 +22,7 @@ REFERENCE_COLORS = {
     "CYAN": 95,
     "BLUE": 115,
     "VIOLET": 140,
-    "CRIMSON": 175,   # สีแดง/ชมพูเข้ม อยู่ใกล้ปลาย hue (วนกลับไปใกล้ 0)
+    "RED": 175,   # สีแดง/ชมพูเข้ม อยู่ใกล้ปลาย hue (วนกลับไปใกล้ 0)
     "ORANGE": 12,
     "GREEN": 55,
 }
