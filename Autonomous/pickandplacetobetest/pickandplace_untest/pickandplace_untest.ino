@@ -178,10 +178,12 @@ void setup() {
   
   // วิ่งชนหินเหมือน snooker
   //forward();
-  //delay(5000);
+  //delay(8000);
   //stopMotors();
-  //turnRight();
-  //delay(2000);
+  //inengmotor.drive(-150, 160);
+  //stopMotors();
+
+  delay(15000);
 
 }
 
@@ -246,7 +248,8 @@ void runPickupState(int targetIdx) {
       openArms();
       if (targetIdx == -1) {
         Serial.println("Still searching.");
-        turnSearch();
+        inengmotor.turnLeft(150, 170);
+        delay(1000);
       } else {
         Serial.println("Stone detected!");
         stopMotors();

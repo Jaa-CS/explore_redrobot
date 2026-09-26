@@ -1,4 +1,3 @@
-
 import cv2
 import numpy as np
 import socket
@@ -145,6 +144,10 @@ def main():
     last_ack_text = ""
     size_checked = False
     size_ok = True
+    last_debug_time = 0.0
+    last_debug_state = None
+    last_nav_command = ""
+    marker_missing_since = None
  
     cv2.namedWindow("Field camera", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Field camera", 1280, 720)
@@ -154,6 +157,16 @@ def main():
         if not ok:
             continue
         now = time.time()
+
+        # Print state changes immediately, then show a short status once per second.
+        if state != last_debug_state:
+            print(f"[STATE] {last_debug_state} -> {state}")
+            last_debug_state = state
+        if now - last_debug_time >= 1.0:
+            print(f"[STATUS] state={state}, target_id={target_id}, target={target}, "
+                  f"ESP32_reply_age={now - last_reply_time:.1f}s, "
+                  f"last_ACK={last_ack_text or 'none'}")
+            last_debug_time = now
  
         # ADDED: make sure the camera really delivers the resolution IMAGE_PTS was measured at
         if not size_checked:
@@ -167,33 +180,38 @@ def main():
  
         # ---- keep-alive / link test -------------------------------------------------
         if now - last_hello >= HELLO_PERIOD:
+            print("[UDP TX] HELLO")
             send_command("HELLO")
             last_hello = now
  
         # ---- everything the ESP32 told us since the last frame ------------------------
         for msg in poll_esp32():
+            print(f"[UDP RX] {msg}")
             last_reply_time = now
             if msg.startswith("PICKED,"):
                 try:
                     pid = int(msg.split(",")[1])
                 except (ValueError, IndexError):
                     continue
+                print(f"[UDP TX] ACK_PICKED for id={pid}")
                 send_command("ACK_PICKED")      # tell the ESP32 to stop repeating PICKED
                 if state == "IDLE":
                     if pid in COLOR_ZONES:
                         target_id = pid
                         target = COLOR_ZONES[pid]
                         state = "NAVIGATING"
-                        print(f"Robot picked color {pid} -> heading to {target}")
+                        print(f"[TARGET] color={pid}, destination={target}")
                     else:
-                        print(f"Robot reported unknown color id {pid} - ignoring")
+                        print(f"[WARNING] Unknown color id {pid}; ignoring PICKED")
             elif msg.startswith("ACK,"):
                 last_ack_text = msg
             elif msg.startswith("PLACED,"):
                 if state == "RELEASING":
-                    print(f"SUCCESS: ESP32 confirmed the stone was placed ({msg})")
+                    print(f"[PLACED] ESP32 confirmed placement: {msg}")
+                    print("[UDP TX] ACK_PLACED")
                     send_command("ACK_PLACED")  # let the ESP32 stop repeating PLACED
                     state = "IDLE"
+                    print("[STATE] Placement complete; returning to IDLE")
                     target = None
                     target_id = None
             # "HELLO_ACK" needs no action beyond refreshing last_reply_time
@@ -230,7 +248,14 @@ def main():
                 error = desired_heading - robot_heading
                 error = math.atan2(math.sin(error), math.cos(error))  # wrap to [-pi, pi]
  
+                if now - last_debug_time >= 1.0:
+                    print(f"[NAV] robot=({robot_x:.1f}, {robot_y:.1f}), "
+                          f"heading={math.degrees(robot_heading):.1f}deg, "
+                          f"target=({target_x:.1f}, {target_y:.1f}), "
+                          f"distance={distance:.1f}, error={math.degrees(error):.1f}deg")
+
                 if distance < ARRIVAL_RADIUS:
+                    print(f"[ARRIVAL] distance={distance:.1f} < {ARRIVAL_RADIUS}; sending ARRIVED")
                     send_command("ARRIVED")
                     last_arrived = now
                     state = "RELEASING"
@@ -242,22 +267,36 @@ def main():
                     turn_pos = "TURN_LEFT" if INVERT_TURNS else "TURN_RIGHT"
                     turn_neg = "TURN_RIGHT" if INVERT_TURNS else "TURN_LEFT"
                     if error > HEADING_TOLERANCE:
-                        send_command(turn_pos)
+                        command = turn_pos
                     elif error < -HEADING_TOLERANCE:
-                        send_command(turn_neg)
+                        command = turn_neg
                     else:
-                        send_command("FORWARD")
+                        command = "FORWARD"
+                    if command != last_nav_command:
+                        print(f"[NAV TX] {command} (error={math.degrees(error):.1f}deg)")
+                        last_nav_command = command
+                    send_command(command)
  
                 cv2.aruco.drawDetectedMarkers(frame, corners, ids)
                 cv2.putText(frame, f"dist={distance:.1f} err={math.degrees(error):.1f}deg",
                             (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             else:
-                # marker not visible this frame - stop rather than drive blind
+                # Marker missing - stop rather than drive blind.
+                if marker_missing_since is None:
+                    marker_missing_since = now
+                    print(f"[MARKER] ID {MARKER_ID} not detected; sending STOP")
+                elif now - marker_missing_since >= 2.0:
+                    # Avoid printing this warning on every frame.
+                    if now - last_debug_time >= 1.0:
+                        print(f"[WARNING] Marker {MARKER_ID} still missing for {now - marker_missing_since:.1f}s")
                 send_command("STOP")
+            if ids is not None and MARKER_ID in ids.flatten():
+                marker_missing_since = None
  
         elif state == "RELEASING":
             # UDP can lose packets: keep asking until the ESP32 answers "PLACED,<id>"
             if now - last_arrived >= ARRIVED_RESEND:
+                print("[UDP TX] ARRIVED retry (waiting for PLACED)")
                 send_command("ARRIVED")
                 last_arrived = now
  
@@ -276,6 +315,7 @@ def main():
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
  
+    print("[EXIT] User closed the camera window; sending STOP")
     send_command("STOP")
     cap.release()
     cv2.destroyAllWindows()
