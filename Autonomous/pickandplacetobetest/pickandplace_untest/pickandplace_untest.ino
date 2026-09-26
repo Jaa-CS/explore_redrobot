@@ -104,6 +104,14 @@ void turnRight() {
   inengmotor.turnRight(170, 120);
 }
 
+void spinLeft() {
+  inengmotor.drive(-150, 160);
+}
+
+void spinRight() {
+  inengmotor.drive(160, -150);
+}
+
 void setup() {
   Serial.begin(115200);
   Wire.begin();
@@ -260,10 +268,10 @@ void runPickupState(int targetIdx) {
         int xC = blocks[targetIdx].xCenter;
         if (xC < FRAME_CENTER_MIN) {
           Serial.println("Turning Right");
-          turnRight();  // TODO: verify direction matches your camera mount
+          spinRight();  // TODO: verify direction matches your camera mount
         } else if (xC > FRAME_CENTER_MAX) {
           Serial.println("Turning Left");
-          turnLeft();
+          spinLeft();
         } else {
           Serial.println("Object is at center.");
           stopMotors();
