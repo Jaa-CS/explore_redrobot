@@ -286,6 +286,7 @@ void runPickupState(int targetIdx) {
         }
         long boxSize = (long)blocks[targetIdx].width * (long)blocks[targetIdx].height;
         int minimum_box_size = 0;
+        int approach_count = 0;
 
         switch (blocks[targetIdx].ID) {
             case 1:
@@ -311,12 +312,13 @@ void runPickupState(int targetIdx) {
                 break;
         }
 
-        if (minimum_box_size > 0 && boxSize >= minimum_box_size) {
+        if (( minimum_box_size > 0) && (boxSize >= minimum_box_size) || (approach_count >= 20)) {
             stopMotors();
             pickupState = PICKING;
         }     
           else {
             forward();
+            approach_count++;
             Serial.println("Moving closer to the stone.");
             
           }
