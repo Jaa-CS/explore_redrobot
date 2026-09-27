@@ -39,10 +39,10 @@ FIELD_PTS = np.array([
 # Measure these once the field is set up.
 COLOR_ZONES_PX = {
     1: (1158, 894),     # orange
-    2: (1175, 198),     # blue 
+    2: (816, 901),     # blue 
     3: (407, 745),    # purple 
     4: (419, 373),     # green  
-    5: (816, 901),    # cyan       
+    5: (1175, 198),    # cyan       
     6: (816, 174),    # red       
 }
 
@@ -60,9 +60,11 @@ COLOR_ZONES_PX = {
 
 HEADING_TOLERANCE = math.radians(8)   # how close to "pointed at the target" counts as aligned
 ARRIVAL_RADIUS = 8                    # field units - how close counts as "arrived"
+ARM_OFFSET_CM = 15                    # distance from the marker's center to the gripper arms,
+                                       # measured along the robot's forward heading
 
 # change to True if robot turn away from target area
-INVERT_TURNS = True
+INVERT_TURNS = False 
 
 HELLO_PERIOD = 1.0        # keep-alive ping; ESP32 answers HELLO_ACK
 ARRIVED_RESEND = 0.3      # repeat ARRIVED until the ESP32 confirms PLACED
@@ -229,9 +231,15 @@ def main():
                 front_x, front_y = pixel_to_field(*front_px)
                 robot_heading = math.atan2(front_y - robot_y, front_x - robot_x)
  
+                # The stone sits between the arms, ARM_OFFSET_CM ahead of the marker along
+                # the direction the robot faces - not at the marker's own position. Project
+                # that offset forward so distance/arrival are measured from the stone, not the marker.
+                arm_x = robot_x + ARM_OFFSET_CM * math.cos(robot_heading)
+                arm_y = robot_y + ARM_OFFSET_CM * math.sin(robot_heading)
+ 
                 target_x, target_y = target
-                desired_heading = math.atan2(target_y - robot_y, target_x - robot_x)
-                distance = math.hypot(target_x - robot_x, target_y - robot_y)
+                desired_heading = math.atan2(target_y - arm_y, target_x - arm_x)
+                distance = math.hypot(target_x - arm_x, target_y - arm_y)
  
                 error = desired_heading - robot_heading
                 error = math.atan2(math.sin(error), math.cos(error))  # wrap to [-pi, pi]
