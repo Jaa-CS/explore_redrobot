@@ -1,9 +1,10 @@
-#include <SoftwareSerial.h>
-#include <DFRobot_HuskyLens.h>
 #include <HUSKYLENS.h>
 #include <HUSKYLENSMindPlus.h>
 #include <HuskyLensProtocolCore.h>
 #include <Wire.h>
+#include <SoftwareSerial.h>
+
+
 
 
 HUSKYLENS huskylens;
@@ -23,17 +24,17 @@ void setup() {
 
     Serial.println("HuskyLens connected!");
 
-    while (!huskylens.setCustomName("Purple", 1)) {
+    while (!huskylens.setCustomName("Orange", 1)) {
     Serial.println(F("Retrying ID 1 custom name..."));
     delay(100);
   }
   
   // Once the first one succeeds, subsequent writes usually go through instantly
-  huskylens.setCustomName("Cyan", 2);
-  huskylens.setCustomName("Red", 3);
-  huskylens.setCustomName("Gold", 4);
-  huskylens.setCustomName("Blue", 5);
-  huskylens.setCustomName("Green", 6);
+  huskylens.setCustomName("Blue", 2);
+  huskylens.setCustomName("Purple", 3);
+  huskylens.setCustomName("Green", 4);
+  huskylens.setCustomName("Cyan", 5);
+  huskylens.setCustomName("Red", 6);
 
 }
 
@@ -55,29 +56,16 @@ void loop() {
             Serial.print("ID = ");
             Serial.println(result.ID);
 
-            if (result.ID == 1)
+            switch (result.ID)
             {
-                Serial.println("PURPLE");
-            }
-            else if (result.ID == 2)
-            {
-                Serial.println("CYAN");
-            }
-            else if (result.ID == 3)
-            {
-                Serial.println("RED");
-            }
-            else if (result.ID == 4)
-            {
-                Serial.println("GOLD");
-            }
-            else if (result.ID == 5)
-            {
-                Serial.println("BLUE");
-            }
-            else if (result.ID == 6)
-            {
-                Serial.println("GREEN");
+                case 1: Serial.println("Orange"); break;
+                case 2: Serial.println("Blue");   break;
+                case 3: Serial.println("Purple"); break;
+                case 4: Serial.println("Green");  break;
+                case 5: Serial.println("Cyan");   break;
+                case 6: Serial.println("Red");    break;
+                default: Serial.println("Unknown"); break;
+            }    
             }
 
             Serial.print("Block: ");
