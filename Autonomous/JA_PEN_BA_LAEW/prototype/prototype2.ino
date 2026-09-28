@@ -47,12 +47,12 @@ int  color_id = -1;         // color ID of the stone currently held
 bool pick_up_mode = true;
 bool placing_mode = false;
 
-long orange_minimum_box_size = 6200;
-long blue_minimum_box_size = 6600;  
-long purple_minimum_box_size = 6500;
-long green_minimum_box_size = 6500;  
-long cyan_minimum_box_size = 7300;  
-long red_minimum_box_size = 6500;  
+long orange_minimum_box_size = 4500;
+long blue_minimum_box_size = 6300;  
+long purple_minimum_box_size = 5000;
+long green_minimum_box_size = 6200;  
+long cyan_minimum_box_size = 6700;  
+long red_minimum_box_size = 6200;  
 
 long maximum_box_size = 9000;
 
@@ -77,7 +77,10 @@ unsigned long lastPlacedSendTime = 0;
 unsigned long placedWaitStart = 0;
 // ---------------- ------------- ---------------
 
-int approach_count = 0;
+unsigned long approachStartTime = 0;
+const unsigned long APPROACH_TIMEOUT_MS = 4000;  // TODO tune - force a pickup attempt after this
+                                                  // long trying, no matter how the loop iterations
+                                                  // split between CENTERING and APPROACHING
 
 enum SearchSubState { LEG_FORWARD, LEG_TURN };
 SearchSubState searchSubState = LEG_FORWARD;
@@ -97,7 +100,6 @@ void turnSearch() {
 
   if (searchSubState == LEG_FORWARD) {
     forward();
-    delay(1000);
     if (elapsed >= currentLegDuration) {
       stopMotors();
       searchSubState = LEG_TURN;
@@ -186,6 +188,7 @@ void setup() {
   setNameWithRetry("Green", 4);
   setNameWithRetry("Cyan", 5);
   setNameWithRetry("Red", 6);
+  setNameWithRetry("Background", 7);
 
   inengmotor.begin();
   stopMotors();
@@ -276,10 +279,16 @@ void readHuskyLens() {
 int findLargestBlock() {
   int bestIdx = -1;
   long bestSize = -1;
+  const int BACKGROUND_ID = 7;
   for (int i = 0; i < blockCount; i++) {
+
+    if (blocks[i].ID == BACKGROUND_ID) {
+      continue;
+    }
     // find largest detected block by it's area
     long size = (long)blocks[i].width * (long)blocks[i].height;
-    if (size > bestSize) {
+    
+    if (size > bestSize && size <= maximum_box_size) {
       bestSize = size;
       bestIdx = i;
     }
@@ -288,8 +297,17 @@ int findLargestBlock() {
 }
 
 void runPickupState(int targetIdx) {
+  // Force a pickup attempt once the timer runs out, checked here - not
+  // only inside APPROACHING's own condition - so time spent bouncing back
+  // into CENTERING can't silently push the real trigger past the timeout.
+  if (pickupState != SEARCHING && targetIdx != -1 &&
+      millis() - approachStartTime > APPROACH_TIMEOUT_MS) {
+    stopMotors();
+    pickupState = PICKING;
+  }
+
   switch (pickupState) {
-    
+
 // to do
     case SEARCHING:
     Serial.println("Searching state.");
@@ -300,6 +318,7 @@ void runPickupState(int targetIdx) {
     stopMotors();
     pickupState = CENTERING;
     resetSearch();   // ready for next time
+    approachStartTime = millis();  // start the "how long have I been trying" clock
     break;
   }
 
@@ -372,14 +391,12 @@ void runPickupState(int targetIdx) {
                 break;
         }
 
-        if (( minimum_box_size > 0) && (boxSize >= minimum_box_size) && (boxSize <= maximum_box_size) || (approach_count >= 600)) {
+        if (( minimum_box_size > 0) && (boxSize >= minimum_box_size) && (boxSize <= maximum_box_size)) {
             stopMotors();
-            approach_count = 0;
             pickupState = PICKING;
         }     
           else {
             forward();
-            approach_count++;
             Serial.println("Moving closer to the stone.");
             
           }
@@ -422,7 +439,8 @@ void printColorName(int id) {
     case 4: Serial.println("Green");  break;
     case 5: Serial.println("Cyan");   break;
     case 6: Serial.println("Red");    break;
-    default: Serial.println("Unknown"); break;
+    case 7: Serial.println("Background"); break;
+    default: Serial.println("Background"); break;
   }
 }
 
@@ -485,10 +503,11 @@ void runPlacingState() {
     Serial.println("COMMAND = arrived");
     stopMotors();
     Serial.println("Arrived at zone, releasing stone!");
+    
     openArms();
     delay(2000);  // let the servos actually finish opening
     backward();   // move back so the arm doesn't sweep the stone out of the zone
-    delay(2000);
+    delay(5000);
     stopMotors();
 
     waitingForPlacedAck = true;
@@ -521,6 +540,7 @@ void finishPlacing() {
   placing_mode = false;
   pick_up_mode = true;
   pickupState = SEARCHING;
+  resetSearch();
 }
 
 void receiveUDP() {
