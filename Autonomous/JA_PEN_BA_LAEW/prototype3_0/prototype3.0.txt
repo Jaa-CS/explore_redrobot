@@ -1,0 +1,10 @@
+1. Fix 1a — looser detector parameters (field_vision_wx.py)
+
+aruco_params.adaptiveThreshWinSizeMax = 53          # default is 23 - wider range copes with uneven lighting
+
+aruco_params.polygonalApproxAccuracyRate = 0.05     # default is 0.03 - tolerates more corner skew/blur
+
+
+2. Fix 1b — back off when lost near the margin (field_vision_wx.py + prototype2_2.ino)
+
+3. A new state, LEG_BACKUP, sits between driving forward and spinning, so there's always clearance before a turn is attempted — whether or not it actually hit anything.
