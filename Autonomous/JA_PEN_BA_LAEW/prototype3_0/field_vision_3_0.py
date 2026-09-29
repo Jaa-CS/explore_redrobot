@@ -466,11 +466,12 @@ def main():
                     target_id = None
             # "HELLO_ACK" needs no action beyond refreshing last_reply_time
 
+        # ---- find the robot every frame so its heading / arm end are always drawn -------
+        pose = get_robot_pose(frame)
+
         # ---- draw the field: edge, safe margin, and a circle around each colour zone ---
         draw_field_overlay(frame, target_id)
 
-        # ---- find the robot every frame so its heading / arm end are always drawn -------
-        pose = get_robot_pose(frame)
         if pose is not None:
             draw_robot_overlay(frame, pose, target)
             last_seen_x, last_seen_y = pose["x"], pose["y"]   # [EDGE-RECOVERY]
@@ -567,7 +568,9 @@ def main():
                         send_command("STOP")   # blind backing-off didn't help - stop instead of guessing further
                 else:
                     print("lost at midfield, sending stop command")
-                    send_command("STOP")       # lost mid-field for some other reason - just stop rather than drive blind
+                    # NEED CHANGE
+                    send_command("BACKOFF")
+                    #send_command("STOP")       # lost mid-field for some other reason - just stop rather than drive blind
 
         elif state == "RELEASING":
             print("Releasing state")

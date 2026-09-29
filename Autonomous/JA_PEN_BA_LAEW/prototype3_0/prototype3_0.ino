@@ -79,14 +79,14 @@ unsigned long placedWaitStart = 0;
 // ---------------- ------------- ---------------
 
 unsigned long approachStartTime = 0;
-const unsigned long APPROACH_TIMEOUT_MS = 4000;  // TODO tune - force a pickup attempt after this
+const unsigned long APPROACH_TIMEOUT_MS = 8000;  // TODO tune - force a pickup attempt after this
                                                   // long trying, no matter how the loop iterations
                                                   // split between CENTERING and APPROACHING
 
 enum SearchSubState { LEG_FORWARD, LEG_BACKUP, LEG_TURN, LEG_LOOK};
 SearchSubState searchSubState = LEG_FORWARD;
 unsigned long searchLegStartTime = 0;
-unsigned long currentLegDuration = 800;    // starting leg length, ms - longer since field is big
+unsigned long currentLegDuration = 1000;    // starting leg length, ms - longer since field is big
 const unsigned long LEG_GROWTH = 250;       // each leg gets noticeably longer
 
 // Turning is done as short pulses with a standstill "look" after each one, because
@@ -94,12 +94,12 @@ const unsigned long LEG_GROWTH = 250;       // each leg gets noticeably longer
 // (motion blur + the delay before a detection reaches us).
 const int SEARCH_SPIN_SPEED = 160;             // TODO tune: genuinely slower than spinLeft/spinRight's 160,
                                                 // so the camera isn't blurring past a stone mid-pulse
-const unsigned long TURN_PULSE_MS = 300;        // TODO tune: short pulse - covers a small angle, not a big spin
+const unsigned long TURN_PULSE_MS = 400;        // TODO tune: short pulse - covers a small angle, not a big spin
 const unsigned long LOOK_PAUSE_MS = 1000;        // TODO tune: enough for one fresh, sharp HuskyLens read
 const int TURN_PULSES_PER_SWEEP = 3;            // unchanged
 int turnPulsesDone = 0;
 
-const unsigned long BACKUP_PULSE_MS = 450;      // unchanged - no reported issue with wall clearance
+const unsigned long BACKUP_PULSE_MS = 500;      // unchanged - no reported issue with wall clearance
 const unsigned long MAX_LEG_DURATION = 8000;    // unchanged - your call based on field size
 bool searchTurnRight = true;
 
@@ -196,11 +196,11 @@ void turnRight() {
 }
 
 void spinLeft() {
-  inengmotor.spinLeft(160, 160);
+  inengmotor.spinLeft(180, 180);
 }
 
 void spinRight() {
-  inengmotor.spinRight(160, 160);
+  inengmotor.spinRight(180, 180);
 }
 
 void setup() {
@@ -215,8 +215,6 @@ void setup() {
   rightArmServo.attach(RIGHT_SERVO_PIN);
 
   closeArms();
-  delay(5000);
-  openArms();
   delay(5000);
 
   Serial.println("Connecting to HuskyLens...");
@@ -277,10 +275,12 @@ void setup() {
   delay(2000);
   stopMotors();
   inengmotor.spinLeft(200, 200);
-  delay(3800);
+  delay(800);
   inengmotor.backward(205, 200);
   delay(2000);
   stopMotors();
+  openArms();
+  
 
 
 }
@@ -350,6 +350,7 @@ void runPickupState(int targetIdx) {
   if (pickupState != SEARCHING && targetIdx != -1 &&
       millis() - approachStartTime > APPROACH_TIMEOUT_MS) {
     stopMotors();
+    Serial.println("Force picking");
     pickupState = PICKING;
   }
 
@@ -381,19 +382,21 @@ void runPickupState(int targetIdx) {
       if (targetIdx == -1) {
         Serial.println("Centering failed.");
         pickupState = SEARCHING;
+        
         break;
       }
       {
         int xC = blocks[targetIdx].xCenter;
         if (xC < FRAME_CENTER_MIN) {
           Serial.println("Turning Right");
-          spinRight();  // TODO: verify direction matches your camera mount
+          inengmotor.spinLeft(160, 160);  // TODO: verify direction matches your camera mount
         } else if (xC > FRAME_CENTER_MAX) {
           Serial.println("Turning Left");
-          spinLeft();
+          inengmotor.spinRight(160, 160);
         } else {
           Serial.println("Object is at center.");
           stopMotors();
+          
           pickupState = APPROACHING;
         }
       }
@@ -552,6 +555,7 @@ void runPlacingState() {
     // (same motor call used after placing a stone; safe to call every loop)
     Serial.println("COMMAND = backoff");
     backward();
+
 } else if (lastNavCommand == "ARRIVED" && !waitingForPlacedAck) {
     Serial.println("COMMAND = arrived");
     stopMotors();
