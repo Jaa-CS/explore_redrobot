@@ -79,7 +79,7 @@ unsigned long placedWaitStart = 0;
 // ---------------- ------------- ---------------
 
 unsigned long approachStartTime = 0;
-const unsigned long APPROACH_TIMEOUT_MS = 8000;  // TODO tune - force a pickup attempt after this
+const unsigned long APPROACH_TIMEOUT_MS = 4000;  // TODO tune - force a pickup attempt after this
                                                   // long trying, no matter how the loop iterations
                                                   // split between CENTERING and APPROACHING
 
@@ -162,7 +162,7 @@ void turnSearch() {
         searchTurnRight = !searchTurnRight;    // alternate direction - creates the zigzag/fan
 
         if (currentLegDuration > MAX_LEG_DURATION) {
-          currentLegDuration = 800;            // restart wider sweep if nothing found for a while
+          currentLegDuration = 1500;            // restart wider sweep if nothing found for a while
         }
       }
       searchLegStartTime = millis();
@@ -204,7 +204,7 @@ void spinRight() {
 }
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   Wire.begin();
 
   ESP32PWM::allocateTimer(0);
@@ -272,12 +272,12 @@ void setup() {
 
   // วิ่งชน
   inengmotor.forward(200, 205);
-  delay(2000);
+  delay(4000);
   stopMotors();
   inengmotor.spinLeft(200, 200);
-  delay(800);
+  delay(1000);
   inengmotor.backward(205, 200);
-  delay(2000);
+  delay(1000);
   stopMotors();
   openArms();
   
@@ -329,9 +329,9 @@ int findLargestBlock() {
   const int BACKGROUND_ID = 7;
   for (int i = 0; i < blockCount; i++) {
 
-    if (blocks[i].ID == BACKGROUND_ID) {
-      continue;
-    }
+    if (blocks[i].ID < 1 || blocks[i].ID > 6 || blocks[i].ID == 3 || blocks[i].ID == 2) {
+  continue;
+}
     // find largest detected block by it's area
     long size = (long)blocks[i].width * (long)blocks[i].height;
     
@@ -393,7 +393,8 @@ void runPickupState(int targetIdx) {
         } else if (xC > FRAME_CENTER_MAX) {
           Serial.println("Turning Left");
           inengmotor.spinRight(160, 160);
-        } else {
+        } else if (((long)blocks[targetIdx].width * (long)blocks[targetIdx].height ) >= 1500) {
+
           Serial.println("Object is at center.");
           stopMotors();
           

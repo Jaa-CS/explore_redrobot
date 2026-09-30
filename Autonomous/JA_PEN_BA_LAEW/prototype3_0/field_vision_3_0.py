@@ -68,7 +68,7 @@ INVERT_TURNS = False
 
 # ---- steering (proportional) ----
 PANEL_W = 640
-BASE_SPEED = 160                # forward speed while curving - tune this
+BASE_SPEED = 180                # forward speed while curving - tune this
 MAX_STEER = 20                  # how much speed difference at max steering - tune this
 STEER_GAIN = 1.0                # how aggressively steer scales with error - tune this
 MIN_WHEEL_SPEED = 160           # keep both wheels out of the motor dead zone
