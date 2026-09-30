@@ -47,7 +47,7 @@ int  color_id = -1;         // color ID of the stone currently held
 bool pick_up_mode = true;
 bool placing_mode = false;
 
-long orange_minimum_box_size = 4500;
+long orange_minimum_box_size = 6000;
 long blue_minimum_box_size = 6300;  
 long purple_minimum_box_size = 5000;
 long green_minimum_box_size = 6200;  
@@ -135,7 +135,7 @@ void turnSearch() {
       inengmotor.spinRight(SEARCH_SPIN_SPEED, SEARCH_SPIN_SPEED);
       Serial.println("spin right");
     } else {
-      inengmotor.spinLeft(SEARCH_SPIN_SPEED, SEARCH_SPIN_SPEED);
+      inengmotor.spinRight(SEARCH_SPIN_SPEED, SEARCH_SPIN_SPEED);
       Serial.println("spin left");
 
     }
