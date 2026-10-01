@@ -35,10 +35,10 @@ FRAME_W, FRAME_H = 1920, 1080
 # corners in an image viewer. Order: top-left, top-right, bottom-right, bottom-left.
 # these must be measured on a 1920x1080 frame.
 IMAGE_PTS = np.array([
-    [136, 40],           # pixel coords of field's top-left corner
-    [1916, 36],         # top-right
-    [1912, 1057],       # bottom-right
-    [136, 1045],        # bottom-left
+    [32, 9],           # pixel coords of field's top-left corner
+    [1883, 19],         # top-right
+    [1893, 1052],       # bottom-right
+    [39, 1057],        # bottom-left
 ], dtype=np.float32)
 
 # Step 2: the real size of the field (any consistent unit - cm is convenient).
@@ -50,12 +50,12 @@ FIELD_PTS = np.array([
 
 # Step 3: where each color zone's center is (pixels, on the same 1920x1080 frame).
 COLOR_ZONES_PX = {
-    1: (1239, 861),     # orange
-    2: (849, 893),      # blue
-    3: (426, 769),      # purple
-    4: (446, 371),      # green
-    5: (1219, 170),     # cyan
-    6: (764, 202),      # red
+    1: (675, 857),     # orange
+    2: (1140, 182),      # blue
+    3: (1168, 794),      # purple
+    4: (266, 814),      # green
+    5: (274, 325),     # cyan
+    6: (727, 170),      # red
 }
 
 HEADING_TOLERANCE = math.radians(8)   # not used by the proportional steering below; kept for reference
