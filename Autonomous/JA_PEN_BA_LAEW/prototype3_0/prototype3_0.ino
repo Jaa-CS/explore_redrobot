@@ -272,7 +272,7 @@ void setup() {
 
   // วิ่งชน
   inengmotor.forward(200, 205);
-  delay(4000);
+  delay(6500);
   stopMotors();
   inengmotor.spinLeft(200, 200);
   delay(1000);
